@@ -1,0 +1,2 @@
+- Nothing Special. Pracice website for CURD operations in MongoDb.
+- Server Side
