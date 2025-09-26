@@ -1,15 +1,37 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+
+const verifyToken = (req, res, next) => {
+  const token = req?.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized Access" });
+  }
+
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "Unauthorized Access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
 
 // DATABASE CONNECTION STARTS
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.v2pkese.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -31,6 +53,21 @@ async function run() {
     const applicationCollection = client
       .db("JobPortalMilestone11")
       .collection("applications");
+
+    // JWT related apt
+    app.post("/jwt", async (req, res) => {
+      const userData = req.body;
+      const token = jwt.sign(userData, process.env.JWT_ACCESS_SECRET, {
+        expiresIn: "7d",
+      });
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: false,
+      });
+
+      res.send({ success: true });
+    });
 
     // Jobs api
     app.get("/jobs", async (req, res) => {
@@ -64,8 +101,13 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/applications", async (req, res) => {
+    app.get("/applications", verifyToken, async (req, res) => {
       const email = req.query.email;
+
+      if(email != req.decoded.email){
+        return req.status(403).send({message: "Forbidden Access."})
+      }
+
       const query = {
         applicant: email,
       };
